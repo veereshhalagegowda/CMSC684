@@ -1,18 +1,9 @@
-# Object files
-*.o
-*.ko
-
-# Libraries
-*.lib
-*.a
-
-# Shared objects (inc. Windows DLLs)
-*.dll
-*.so
-*.so.*
-*.dylib
-
-# Executables
-*.exe
-*.out
-*.app
+HW3Msg.class
+HW3Msg.java
+HW3Msg.py
+HW3Msg.pyc
+TOSSIM.py
+TOSSIM.pyc
+_TOSSIMmodule.so
+app.xml
+simbuild/
