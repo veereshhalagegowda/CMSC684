@@ -5,7 +5,7 @@
 
 #include <Timer.h>
 #include "HW3.h"
-#include "AM.h"l
+#include "AM.h"
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -15,6 +15,7 @@
 #define DROP_ATTACK 64
 #define DELAY_ATTACK 128
 #define INJECT_ATTACK 192
+#define INITIALIZE_NODE_CYCLES 10
 
 //this function returns the ID of parent. It uses a predefined static routing table
 uint8_t GetMyParent(uint8_t nodeid)
@@ -373,6 +374,15 @@ message_t* QueueIt(message_t *msg, void *payload, uint8_t len)
         message_t* msg;
         hw3_msg * btrpkt;
         counter ++;
+        printf("trying to learn the counter %d\n", counter);
+        if (counter <= INITIALIZE_NODE_CYCLES)
+        {
+            printf("nodes NOT initialized\n");
+        }
+        else
+        {
+            printf("nodes have Initialized\n");
+        }
         //call Leds.set(counter);
 
         if (TOS_NODE_ID != BASESTATION_ID)
@@ -400,7 +410,7 @@ message_t* QueueIt(message_t *msg, void *payload, uint8_t len)
 			btrpkt->nodeid = TOS_NODE_ID;
 			btrpkt->counter = counter;
 			btrpkt->destid = my_parent;
-
+            
 			btrpkt->time = call LocalTime.get();
 			btrpkt->routeCounter=0;
 			btrpkt->route[btrpkt->routeCounter] = TOS_NODE_ID; /* QOS ATTACK and encode/decode fn */
@@ -463,6 +473,8 @@ void get_nodeID(hw3_msg *btrpkt, int Attack_Type)
     {
         int i=0;
         uint32_t localTime;
+        hw3_msg* inj_btrpkt;
+        message_t* inj_msg;
 	
 
     	if (len == sizeof(hw3_msg))
@@ -551,7 +563,7 @@ void get_nodeID(hw3_msg *btrpkt, int Attack_Type)
 				
 			case 3:
 			{
-				dbg("BOOT", "ALERT!!! Malicious node detected, Packet INJECT in Progress...\n");
+				dbg("BOOT", "ALERT!!! Malicious node detected, Packet INJECT in Progress... by node %d\n", TOS_NODE_ID);
 				get_nodeID(btrpkt, INJECT_ATTACK);
 
 				//Insert it into buffer to be relayed forward
@@ -560,23 +572,63 @@ void get_nodeID(hw3_msg *btrpkt, int Attack_Type)
 			        call RadioAMPacket.setDestination(msg, my_parent);
 			        call RadioAMPacket.setSource(msg, TOS_NODE_ID);
 				msg = QueueIt(msg, payload, len);
-			}
+                atomic
+                    if(!radioFull)
+                    {
+                        inj_btrpkt = (hw3_msg*) (call RadioPacket.getPayload(msg, sizeof (hw3_msg)));
+                        if (inj_btrpkt == NULL)
+                        {
+                            dbg ("ERR", "payload is smaller than length!\n");
+                            exit(-1);
+                        }
+                    
+                    inj_btrpkt->time = btrpkt->time;
+                    inj_btrpkt->nodeid = btrpkt->time;
+                    inj_btrpkt->destid = btrpkt->destid;
+                    inj_btrpkt->groupid = btrpkt->groupid;
+                    inj_btrpkt->counter  = btrpkt->counter;
+                    inj_btrpkt->routeCounter = btrpkt->routeCounter;
+                    for(i=0;i<5;i++)
+                    {
+                        inj_btrpkt->route[i] = btrpkt->route[i];
+                    }
+
+                    call RadioPacket.setPayloadLength(msg, sizeof (hw3_msg));
+                    call RadioAMPacket.setDestination(msg, my_parent);
+                    call RadioAMPacket.setSource(msg, TOS_NODE_ID);
+
+                    inj_msg = radioQueue[radioIn];
+                    radioQueue[radioIn] = msg;
+                    msg = inj_msg;
+
+                    radioIn = (radioIn + 1) % RADIO_QUEUE_LEN;
+                    if(radioIn >=RADIO_QUEUE_LEN)
+                        radioIn=0;
+                    if(radioIn == radioOut)
+                        radioFull = TRUE;
+                    if (!radioBusy)
+                    {
+                        post RadioSendTask();
+                        radioBusy = TRUE;
+                    }
+                }
+			    }
 				break;
 		    }
-                }
-            }
-            else   //not destined for me, drop it!
-            {
-                dbg("DROP", "Droped the packet__%d, %d, %d\n", btrpkt->nodeid, btrpkt->destid, btrpkt->time);
-            }  
-            
-    	}
-        else
-        {
-            dbg("DROP", "wrong length! %d instead of %d\n", len, sizeof(hw3_msg));
         }
-    	return msg;
+    }
+    else   //not destined for me, drop it!
+    {
+        dbg("DROP", "Dropped the packet__%d, %d, %d\n", btrpkt->nodeid, btrpkt->destid, btrpkt->time);
     }  
+            
+    }
+    else
+    {
+        dbg("DROP", "wrong length! %d instead of %d\n", len, sizeof(hw3_msg));
+    }
+    return msg;
+}  
 //********** 
 //Send Done
 //********* 
