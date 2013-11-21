@@ -1,6 +1,6 @@
-/*
-*
-*
+/* Edited by: Veeresh Halagegowda
+*  Email ID : vp67051@umbc.edu
+*  Course   : Assignment - 3, CMSC-684 - Wireless Sensor Networks - Fall 2013
 */
 
 #include <Timer.h>
@@ -373,6 +373,7 @@ message_t* QueueIt(message_t *msg, void *payload, uint8_t len)
     	int i;
         message_t* msg;
         hw3_msg * btrpkt;
+        //learn_route * rtpkt;
         counter ++;
         printf("trying to learn the counter %d\n", counter);
         if (counter <= INITIALIZE_NODE_CYCLES)
@@ -408,6 +409,18 @@ message_t* QueueIt(message_t *msg, void *payload, uint8_t len)
 			}
 
 			btrpkt->nodeid = TOS_NODE_ID;
+            /*for(i=0;i<=27;i++)
+            {
+                for(j=0;j<=5;j++)
+                for(rtpkt->learn_counter = 0; rtpkt->counter < =3; rtpkt->counter ++)
+                {
+                    if(rtpkt->learn_counter<3)
+                    {
+                        rtpkt[i].learn_route[j] = TOS_NODE_ID;
+                    }
+                }
+                rtpkt->learn_counter ++;
+            }*/
 			btrpkt->counter = counter;
 			btrpkt->destid = my_parent;
             
@@ -415,6 +428,7 @@ message_t* QueueIt(message_t *msg, void *payload, uint8_t len)
 			btrpkt->routeCounter=0;
 			btrpkt->route[btrpkt->routeCounter] = TOS_NODE_ID; /* QOS ATTACK and encode/decode fn */
 			btrpkt->routeCounter = btrpkt->routeCounter + 1;
+
 			
 			//Set packet header data. These info will be adjusted in each hop
 			call RadioPacket.setPayloadLength(msg, sizeof (hw3_msg));
@@ -459,8 +473,11 @@ void get_nodeID(hw3_msg *btrpkt, int Attack_Type)
 {
 	uint32_t localTime;
 	localTime = call LocalTime.get();
-	hop2hop_delay = localTime - btrpkt->time;
-	 /* recording route */
+	hop2hop_delay = localTime - btrpkt->hop2hop_delay[btrpkt->routeCounter - 1];
+
+     /* recording route */
+     /* Bit setting for the packet to be identified as the Attack Type */
+
 	btrpkt->route[btrpkt->routeCounter] = TOS_NODE_ID | Attack_Type;
 	btrpkt->hop2hop_delay[btrpkt->routeCounter] = hop2hop_delay;
 	btrpkt->routeCounter = btrpkt->routeCounter + 1;
@@ -524,12 +541,12 @@ void get_nodeID(hw3_msg *btrpkt, int Attack_Type)
 			{
 				dbg("BOOT", "NORMAL NODE\n");
 				get_nodeID(btrpkt, NORMAL_NODE);
-
+               
 				//Insert it into buffer to be relayed forward
-	                        dbg("FWD", "QUEUE it to be relayed to %d\n",my_parent);
-		    		//Adjust source and destination of the packet for next hop
-			        call RadioAMPacket.setDestination(msg, my_parent);
-			        call RadioAMPacket.setSource(msg, TOS_NODE_ID);
+	            dbg("FWD", "QUEUE it to be relayed to %d\n",my_parent);
+		    	//Adjust source and destination of the packet for next hop
+			    call RadioAMPacket.setDestination(msg, my_parent);
+			    call RadioAMPacket.setSource(msg, TOS_NODE_ID);
 				msg = QueueIt(msg, payload, len);
 			}
 				break;
@@ -537,12 +554,12 @@ void get_nodeID(hw3_msg *btrpkt, int Attack_Type)
 			{
 				dbg("BOOT", "ALERT!!! Malicious node detected, DROP ATTACK in Progress...\n");
 				get_nodeID(btrpkt, DROP_ATTACK);
-
-				//Insert it into buffer to be relayed forward
-	                        dbg("FWD", "QUEUE it to be relayed to %d\n",my_parent);
-		    		//Adjust source and destination of the packet for next hop
-			        call RadioAMPacket.setDestination(msg, my_parent);
-			        call RadioAMPacket.setSource(msg, TOS_NODE_ID);
+                
+                //Insert it into buffer to be relayed forward
+	            dbg("FWD", "QUEUE it to be relayed to %d\n",my_parent);
+		    	//Adjust source and destination of the packet for next hop
+			    call RadioAMPacket.setDestination(msg, my_parent);
+			    call RadioAMPacket.setSource(msg, TOS_NODE_ID);
 				msg = QueueIt(msg, payload, len);
 			}
 				break;
@@ -552,11 +569,15 @@ void get_nodeID(hw3_msg *btrpkt, int Attack_Type)
 				dbg("BOOT", "ALERT!!! Malicious node detected, DELAY ATTACK in Progress...\n");
 				get_nodeID(btrpkt, DELAY_ATTACK);
 
+                /* Half duty cycle delay is being calculated for a particular hop */
+                hop2hop_delay = hop2hop_delay + TIMER_PERIOD_MILLI/2;
+                btrpkt->hop2hop_delay[btrpkt->routeCounter] = hop2hop_delay;
+
 				//Insert it into buffer to be relayed forward
-	                        dbg("FWD", "QUEUE it to be relayed to %d\n",my_parent);
-		    		//Adjust source and destination of the packet for next hop
-			        call RadioAMPacket.setDestination(msg, my_parent);
-			        call RadioAMPacket.setSource(msg, TOS_NODE_ID);
+	            dbg("FWD", "QUEUE it to be relayed to %d\n",my_parent);
+		    	//Adjust source and destination of the packet for next hop
+			    call RadioAMPacket.setDestination(msg, my_parent);
+			    call RadioAMPacket.setSource(msg, TOS_NODE_ID);
 				msg = QueueIt(msg, payload, len);
 			}
 				break;
@@ -565,13 +586,16 @@ void get_nodeID(hw3_msg *btrpkt, int Attack_Type)
 			{
 				dbg("BOOT", "ALERT!!! Malicious node detected, Packet INJECT in Progress... by node %d\n", TOS_NODE_ID);
 				get_nodeID(btrpkt, INJECT_ATTACK);
-
+                
 				//Insert it into buffer to be relayed forward
-	                        dbg("FWD", "QUEUE it to be relayed to %d\n",my_parent);
-		    		//Adjust source and destination of the packet for next hop
-			        call RadioAMPacket.setDestination(msg, my_parent);
-			        call RadioAMPacket.setSource(msg, TOS_NODE_ID);
+	            dbg("FWD", "QUEUE it to be relayed to %d\n",my_parent);
+		    	
+                //Adjust source and destination of the packet for next hop
+			    call RadioAMPacket.setDestination(msg, my_parent);
+			    call RadioAMPacket.setSource(msg, TOS_NODE_ID);
 				msg = QueueIt(msg, payload, len);
+                
+                /* Packet Injection */
                 atomic
                     if(!radioFull)
                     {
@@ -588,6 +612,7 @@ void get_nodeID(hw3_msg *btrpkt, int Attack_Type)
                     inj_btrpkt->groupid = btrpkt->groupid;
                     inj_btrpkt->counter  = btrpkt->counter;
                     inj_btrpkt->routeCounter = btrpkt->routeCounter;
+                    
                     for(i=0;i<5;i++)
                     {
                         inj_btrpkt->route[i] = btrpkt->route[i];
@@ -596,6 +621,7 @@ void get_nodeID(hw3_msg *btrpkt, int Attack_Type)
                     call RadioPacket.setPayloadLength(msg, sizeof (hw3_msg));
                     call RadioAMPacket.setDestination(msg, my_parent);
                     call RadioAMPacket.setSource(msg, TOS_NODE_ID);
+                    dbg("DBG", "Packet Injected with source: %d, destination: %d, timestamp: %d\n", inj_btrpkt->nodeid, inj_btrpkt->destid, inj_btrpkt->time);
 
                     inj_msg = radioQueue[radioIn];
                     radioQueue[radioIn] = msg;
